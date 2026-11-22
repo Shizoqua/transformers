@@ -3687,6 +3687,43 @@ class GenerationIntegrationTests(unittest.TestCase):
                 )
             )
 
+    def test_repetition_penalty_inputs_embeds_left_padding(self):
+        """
+        With only `inputs_embeds`, `input_ids` holds just the generated tokens, so the left padding of the prompt must
+        not exclude any of them from the repetition penalty: a padded prompt should get the same scores as unpadded.
+        """
+        set_seed(0)
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            pad_token_id=0,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        embed = model.get_input_embeddings()
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "repetition_penalty": 2.0,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+
+        unpadded = torch.tensor([[5, 6]], device=torch_device)
+        padded = torch.tensor([[0, 0, 0, 5, 6], [7, 8, 9, 10, 11]], device=torch_device)
+        out_unpadded = model.generate(
+            inputs_embeds=embed(unpadded), attention_mask=torch.ones_like(unpadded), **generation_kwargs
+        )
+        out_padded = model.generate(
+            inputs_embeds=embed(padded), attention_mask=(padded != 0).long(), **generation_kwargs
+        )
+
+        for scores_unpadded, scores_padded in zip(out_unpadded.scores, out_padded.scores):
+            torch.testing.assert_close(scores_padded[:1], scores_unpadded, rtol=1e-4, atol=1e-4)
+
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""

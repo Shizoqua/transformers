@@ -1473,7 +1473,7 @@ class GenerationMixin(ContinuousMixin):
             mask = (model_kwargs or {}).get(
                 "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
             )
-            padding_lengths = (mask != 0).int().argmax(dim=1) if mask is not None else None
+            padding_lengths = (mask != 0).int().argmax(dim=1) if mask is not None and input_ids_seq_length else None
             processors.append(
                 RepetitionPenaltyLogitsProcessor(
                     generation_config.repetition_penalty, prompt_ignore_length=padding_lengths
